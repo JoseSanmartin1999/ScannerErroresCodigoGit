@@ -1,32 +1,43 @@
 import sys
 import os
-import random
 
 def scan_code():
     print("Iniciando escaneo de seguridad...")
     vulnerable = False
     
-    # Escanea archivos en el directorio actual
+    # Recorremos todas las carpetas y archivos
     for root, dirs, files in os.walk("."):
+        
+        # 1. Ignorar carpeta oculta de git y la carpeta de scripts
+        if ".git" in root or "scripts" in root:
+            continue
+
         for file in files:
-            if file.endswith((".py", ".js", ".java")): # Archivos de código
+            # 2. IMPORTANTE: Ignorar este mismo archivo para no detectarse a sí mismo
+            if file == "dummy_scan.py":
+                continue
+
+            # Analizar solo archivos de código
+            if file.endswith((".py", ".js", ".java", ".ts")):
                 try:
-                    with open(os.path.join(root, file), "r", errors="ignore") as f:
+                    file_path = os.path.join(root, file)
+                    with open(file_path, "r", errors="ignore") as f:
                         content = f.read()
-                        if "PELIGRO" in content: # SIMULACION DE VULNERABILIDAD
+                        # Buscamos la palabra clave
+                        if "PELIGRO" in content:
                             vulnerable = True
                             print(f"Patrón peligroso detectado en: {file}")
-                except:
-                    pass
+                except Exception as e:
+                    print(f"No se pudo leer {file}: {e}")
 
     if vulnerable:
         print("CLASIFICACIÓN: VULNERABLE")
         print("Probabilidad: 99.9%")
-        sys.exit(1) # Código de error para que falle el pipeline
+        sys.exit(1) # Falla el pipeline
     else:
         print("CLASIFICACIÓN: SEGURO")
-        print("Probabilidad: 95.0%")
-        sys.exit(0) # Éxito
+        print("Probabilidad: 0.0%")
+        sys.exit(0) # Pasa el pipeline
 
 if __name__ == "__main__":
     scan_code()
