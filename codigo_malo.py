@@ -1,1 +1,1 @@
-print("SEGURO")
+print("PELIGRO")
