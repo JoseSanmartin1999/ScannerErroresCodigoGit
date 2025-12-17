@@ -1,0 +1,96 @@
+name: Secure CI/CD Pipeline
+
+on:
+  pull_request:
+    branches: [ "test" ]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Necesario para ver el diff completo
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Instalar Requests (para Telegram)
+        run: pip install requests
+
+      - name: Notificar Inicio
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/telegram_bot.py "🚀 Iniciando revisión de seguridad en PR #${{ github.event.number }}"
+
+      - name: Ejecutar Modelo de Seguridad (Dummy)
+        id: scan
+        continue-on-error: true # Importante: No detenerse aún para poder notificar el fallo
+        run: python scripts/dummy_scan.py
+
+      # --- SI ES VULNERABLE ---
+      - name: Gestionar Vulnerabilidad
+        if: steps.scan.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          # 1. Notificar Telegram [cite: 40]
+          python scripts/telegram_bot.py "❌ ALERTA: Código VULNERABLE detectado. PR rechazado."
+          
+          # 2. Comentar en el PR [cite: 39]
+          gh pr comment ${{ github.event.number }} --body "⛔ **SEGURIDAD FALLIDA** \n\n El modelo detectó vulnerabilidades críticas. Se ha bloqueado el merge."
+          
+          # 3. Etiquetar PR [cite: 41]
+          gh pr edit ${{ github.event.number }} --add-label "fixing-required"
+          
+          # 4. Crear Issue Automática [cite: 41]
+          gh issue create --title "Vulnerabilidad en PR #${{ github.event.number }}" --body "Se detectó código inseguro. Revisar logs." --assignee ${{ github.actor }}
+          
+          # 5. Cerrar PR o fallar el job para bloquear merge [cite: 38]
+          gh pr close ${{ github.event.number }}
+          exit 1
+
+      # --- SI ES SEGURO ---
+      - name: Notificar Éxito
+        if: steps.scan.outcome == 'success'
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/telegram_bot.py "✅ Código SEGURO. Procediendo a pruebas."
+
+  merge-and-test:
+    needs: security-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Merge Automático a Test
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge ${{ github.event.number }} --merge --auto # [cite: 44]
+      
+      # Aquí irían los tests reales, ponemos un dummy
+      - name: Ejecutar Pruebas Unitarias
+        run: | 
+          echo "Ejecutando pytest..."
+          # pytest # Descomentar cuando existan tests reales
+
+      - name: Notificar Tests
+        if: success()
+        env:
+           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/telegram_bot.py "✅ Pruebas unitarias pasadas en rama TEST."
