@@ -51,7 +51,9 @@ def analizar_codigo():
                         archivos_afectados.append(file)
                         
                 except Exception as e:
-                    print(f"Error leyendo {file}: {e}")
+                    print(f"❌ ERROR CRÍTICO en {file}: {e}")
+                    print("⚠️ No se pudo analizar el archivo. Por seguridad, se bloquea el proceso.")
+                    sys.exit(1) # <--- ESTO ES LA CLAVE: Matar el proceso si hay error
 
     if es_vulnerable:
         print(f"\n⛔ RECHAZADO: Se detectaron vulnerabilidades en: {archivos_afectados}")

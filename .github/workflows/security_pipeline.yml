@@ -30,7 +30,7 @@ jobs:
       - name: Instalar Dependencias del Modelo
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install --pre -r requirements.txt
           # Esto instalará scikit-learn, joblib, requests, etc.
 
       - name: Notificar Inicio
