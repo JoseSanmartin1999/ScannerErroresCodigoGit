@@ -1,46 +1,36 @@
-import sqlite3
-import os
-from flask import Flask, request
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bienvenido a la App Vulnerable (No usar en producción)"
+    return "✅ Sistema Seguro v2.0 - Funcionando Correctamente"
 
-# CASO 1: SQL INJECTION (El clásico)
-# El modelo debería detectar palabras clave como 'execute', 'SELECT' concatenado con inputs.
-@app.route('/buscar_usuario')
-def buscar_usuario():
-    username = request.args.get('username')
-    
-    # ❌ PELIGRO: Concatenación directa de strings en una consulta SQL
-    # Un atacante podría poner: admin' --
-    query = "SELECT * FROM users WHERE username = '" + username + "'"
-    
-    conn = sqlite3.connect('database.db')
-    c = conn.cursor()
+# EJEMPLO 1: Cálculo Seguro
+# Antes usabas 'eval' (Peligroso). Ahora usamos 'int()' (Seguro).
+@app.route('/calcular')
+def calcular():
+    entrada = request.args.get('numero', '0')
     try:
-        c.execute(query) # <--- Aquí está la vulnerabilidad que busca la IA
-        result = c.fetchall()
-        return str(result)
-    except Exception as e:
-        return str(e)
-    finally:
-        conn.close()
+        # VALIDACIÓN: Forzamos que sea un número. 
+        # Si el usuario pone código malicioso, esto dará error y no se ejecutará.
+        numero = int(entrada)
+        resultado = numero * 10
+        return jsonify({"input": numero, "resultado": resultado})
+    except ValueError:
+        return jsonify({"error": "Entrada inválida. Solo se aceptan números."}), 400
 
-# CASO 2: OS COMMAND INJECTION (El más peligroso)
-# El modelo debería alarmarse al ver 'os.system' o 'eval' con datos de entrada.
-@app.route('/ping')
-def ping():
-    ip = request.args.get('ip')
+# EJEMPLO 2: Manejo de Texto Seguro
+# Antes hacías inyección de comandos. Ahora solo devolvemos texto limpio.
+@app.route('/perfil')
+def perfil():
+    usuario = request.args.get('user', 'Invitado')
     
-    # ❌ PELIGRO: El usuario puede ejecutar comandos del sistema
-    # Un atacante podría poner: 127.0.0.1; rm -rf /
-    os.system("ping -c 1 " + ip) 
+    # SANITIZACIÓN BÁSICA: Quitamos caracteres que podrían romper el HTML
+    usuario_limpio = usuario.replace("<", "").replace(">", "")
     
-    return "Ping ejecutado (revisar consola del servidor)"
+    return f"Bienvenido al perfil de: {usuario_limpio}"
 
 if __name__ == '__main__':
-    # debug=True en producción también es una mala práctica
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # En producción, debug debe ser False
+    app.run(host='0.0.0.0', port=5000, debug=False)
