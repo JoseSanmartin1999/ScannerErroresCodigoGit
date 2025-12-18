@@ -1,0 +1,88 @@
+name: Test - Pruebas Automáticas
+
+on:
+  push:
+    branches: [ "test" ]
+  pull_request:
+    branches: [ "test" ]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v3
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: 📦 Instalar Dependencias
+        run: |
+          pip install requests pytest
+
+      - name: 📢 Notificar Inicio de Pruebas
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python scripts/telegram_bot.py "🧪 [TEST] Ejecutando pruebas automáticas..." || echo "Telegram no configurado"
+
+      - name: 🧪 Ejecutar Tests Simples
+        id: tests
+        continue-on-error: true
+        run: |
+          chmod +x scripts/run_tests.py
+          python scripts/run_tests.py
+
+      # --- SI LAS PRUEBAS FALLAN ---
+      - name: ❌ Pruebas Fallidas - Bloquear Merge
+        if: steps.tests.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          echo "❌ PRUEBAS FALLIDAS - BLOQUEANDO MERGE A MAIN"
+          
+          # Notificar
+          python scripts/telegram_bot.py "❌ [TEST] Pruebas FALLIDAS. Merge a MAIN bloqueado." || echo "Notificación fallida"
+          
+          # Si es PR, comentar
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            gh pr comment ${{ github.event.number }} --body "❌ **PRUEBAS FALLIDAS**
+            
+            Las pruebas automáticas no pasaron.
+            
+            ❌ El merge a MAIN está **BLOQUEADO**.
+            
+            Por favor, corrija los errores." || echo "Comentario fallido"
+            
+            gh pr edit ${{ github.event.number }} --add-label "tests-failed" || echo "Etiqueta fallida"
+          fi
+          
+          exit 1
+
+      # --- SI LAS PRUEBAS PASAN ---
+      - name: ✅ Pruebas Exitosas - Aprobar para Main
+        if: steps.tests.outcome == 'success'
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          echo "✅ PRUEBAS EXITOSAS - APROBADO PARA MAIN"
+          python scripts/telegram_bot.py "✅ [TEST] Todas las pruebas pasaron. Listo para MAIN y despliegue." || echo "Notificación fallida"
+
+      - name: 🔀 Auto-merge a Main (si es PR)
+        if: steps.tests.outcome == 'success' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Intentando auto-merge a main..."
+          gh pr merge ${{ github.event.number }} --merge --auto || echo "Auto-merge no disponible, requiere aprobación manual"
