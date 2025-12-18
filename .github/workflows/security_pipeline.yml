@@ -3,6 +3,9 @@ name: Secure CI/CD Pipeline
 on:
   pull_request:
     branches: [ "test" ]
+  # Opcional: Para que también corra al hacer push directo a test
+  # push:
+  #   branches: [ "test" ]
 
 permissions:
   contents: write
@@ -23,20 +26,26 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Instalar Requests
-        run: pip install requests
+      # CAMBIO 1: Instalamos TODAS las librerías necesarias para la IA
+      - name: Instalar Dependencias del Modelo
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          # Esto instalará scikit-learn, joblib, requests, etc.
 
       - name: Notificar Inicio
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          python scripts/telegram_bot.py "🚀 Iniciando revisión de seguridad en PR #${{ github.event.number }}"
+          python scripts/telegram_bot.py "🚀 Iniciando revisión con IA en PR #${{ github.event.number }}"
 
-      - name: Ejecutar Modelo de Seguridad (Dummy)
+      # CAMBIO 2: Ejecutamos el script que usa el modelo real
+      - name: Ejecutar Modelo de IA
         id: scan
         continue-on-error: true
-        run: python scripts/dummy_scan.py
+        # Asegúrate de que tu script se llame ai_scan.py en la carpeta scripts
+        run: python scripts/ai_scan.py
 
       # --- SI ES VULNERABLE ---
       - name: Gestionar Vulnerabilidad
@@ -46,10 +55,10 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          python scripts/telegram_bot.py "❌ ALERTA: Código VULNERABLE detectado. PR rechazado."
-          gh pr comment ${{ github.event.number }} --body "⛔ **SEGURIDAD FALLIDA** \n\n El modelo detectó vulnerabilidades. Merge bloqueado."
+          python scripts/telegram_bot.py "❌ ALERTA: Código VULNERABLE detectado por la IA. PR rechazado."
+          gh pr comment ${{ github.event.number }} --body "⛔ **SEGURIDAD FALLIDA** \n\n El modelo de IA detectó patrones peligrosos. Merge bloqueado."
           gh pr edit ${{ github.event.number }} --add-label "fixing-required"
-          gh issue create --title "Vulnerabilidad en PR #${{ github.event.number }}" --body "Se detectó código inseguro. Revisar logs." --assignee ${{ github.actor }}
+          gh issue create --title "Vulnerabilidad AI en PR #${{ github.event.number }}" --body "El modelo predictivo clasificó este código como inseguro." --assignee ${{ github.actor }}
           gh pr close ${{ github.event.number }}
           exit 1
 
@@ -60,7 +69,7 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          python scripts/telegram_bot.py "✅ Código SEGURO. Procediendo a pruebas."
+          python scripts/telegram_bot.py "✅ Código APROBADO por la IA. Procediendo a pruebas."
 
   merge-and-test:
     needs: security-scan
@@ -86,4 +95,4 @@ jobs:
            TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
            TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          python scripts/telegram_bot.py "✅ Pruebas unitarias pasadas en rama TEST."
+          python scripts/telegram_bot.py "✅ Pruebas pasadas. Código listo en rama TEST."
